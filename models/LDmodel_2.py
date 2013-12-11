@@ -8,7 +8,8 @@ import math
 import theano
 import theano.tensor as T
 
-from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
+#from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
+from theano.tensor.shared_randomstreams import RandomStreams
 
 class LDmodel():
 	
@@ -86,6 +87,9 @@ class LDmodel():
 		self.ns=ns		#dimensionality of latent variables
 		self.npcl=npcl	#numer of particles in particle filter
 		
+		#this is used for the resampling
+		nummat=np.repeat(np.reshape(np.arange(npcl),(npcl,1)),npcl,axis=1)
+		self.idx_mat=theano.shared(nummat.T)
 		
 		#for ease of use and efficient computation (these are used a lot)
 		self.CCT=T.dot(self.C, self.C.T)
@@ -274,21 +278,13 @@ class LDmodel():
 		return 1.0/T.sum(self.weights_now**2)
 	
 	
-	def resample_step(self):
-		
-		idx=self.theano_rng.multinomial(pvals=T.reshape(self.weights_now,(1,self.npcl))).T
-		s_samp=T.sum(self.s_now*T.addbroadcast(idx,1),axis=0)
-		
-		return T.cast(s_samp,'float32')
-	
-	
 	def resample(self):
 		
-		s_samps, updates = theano.scan(fn=self.resample_step,
-												outputs_info=[None],
-												n_steps=self.npcl)
-		
-		updates[self.s_now]=T.cast(s_samps,'float32')
+		updates={}
+		samp=self.theano_rng.multinomial(size=self.weights_now.shape,pvals=self.weights_now)
+		idxs=T.cast(T.sum(samp*self.idx_mat,axis=1),'int32')
+		s_samps=self.s_now[idxs]
+		updates[self.s_now]=s_samps
 		updates[self.weights_now]=T.cast(T.ones_like(self.weights_now)/T.cast(self.npcl,'float32'),'float32') #dtype paranoia
 		
 		return updates

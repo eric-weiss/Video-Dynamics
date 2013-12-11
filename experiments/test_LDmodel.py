@@ -6,13 +6,13 @@ import theano.tensor as T
 import sys
 sys.path.insert(0, '../models')
 
-from LDmodel import LDmodel
+from LDmodel_2 import LDmodel
 
 import math
 
 
-nx=144
-ns=6
+nx=8
+ns=2
 npcl=20
 
 nsamps=10
@@ -150,7 +150,7 @@ for i in range(nt-1):
 		energy=learn_step(i,nsamps, lrate)
 		e_hist.append(energy)
 		learn_counter=0
-		pl=update_prop(10,1e-3)
+		pl=update_prop(10,1e-5)
 		ploss_hist.append(pl)
 		l_hist.append(1)
 		lrate=lrate*0.9997
