@@ -3,6 +3,13 @@ from matplotlib import pyplot as pp
 import theano
 import theano.tensor as T
 
+from theano import ProfileMode
+profmode = theano.ProfileMode(optimizer='fast_run', linker=theano.gof.OpWiseCLinker())
+
+import os
+
+os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+
 import sys
 sys.path.insert(0, '../models')
 
@@ -11,15 +18,15 @@ from LDmodel_2 import LDmodel
 import math
 
 
-nx=8
+nx=256
 ns=2
-npcl=20
+npcl=100
 
-nsamps=10
+nsamps=30
 lrate=2e-5
 
 dt=0.05
-nt=100000
+nt=200000
 
 npred=1000
 
@@ -81,7 +88,7 @@ updates0=model.forward_filter_step(x1)
 inference_step=theano.function([idx],None,
 								updates=updates0,
 								givens={x1: xdata[idx,:]},
-								allow_input_downcast=True)
+								allow_input_downcast=True,mode=profmode)
 
 ess=model.get_ESS()
 get_ESS=theano.function([],ess)
@@ -95,11 +102,11 @@ nrg, updates2 = model.update_params(x1, x2, nsmps, lr)
 learn_step=theano.function([idx,nsmps,lr],[nrg],
 							updates=updates2,
 							givens={x1: xdata[idx-1,:], x2: xdata[idx,:]},
-							allow_input_downcast=True)
+							allow_input_downcast=True,mode=profmode)
 
 nps=T.lscalar()
 sps, xps, updates3 = model.simulate_forward(nps)
-predict=theano.function([nps],[sps,xps],updates=updates3,allow_input_downcast=True)
+predict=theano.function([nps],[sps,xps],updates=updates3,allow_input_downcast=True,mode=profmode)
 
 
 plr=T.fscalar()
@@ -107,7 +114,7 @@ pnsteps=T.lscalar()
 ploss, updates4 = model.update_proposal_distrib(pnsteps,plr)
 update_prop=theano.function([pnsteps, plr],ploss,updates=updates4,
 							allow_input_downcast=True,
-							on_unused_input='ignore')
+							on_unused_input='ignore',mode=profmode)
 
 
 
@@ -157,7 +164,7 @@ for i in range(nt-1):
 	else:
 		l_hist.append(0)
 	
-	if i%1000==0:	
+	if (i+1)%1000==0:	
 		#print normalizer
 		
 		print 'Iteration ', i, ' ================================'
@@ -166,7 +173,7 @@ for i in range(nt-1):
 		print 'M'
 		print model.M.get_value()
 		print 'W'
-		print model.W.get_value()
+		#print model.W.get_value()
 		print 'b'
 		print np.exp(model.ln_b.get_value())
 		print '\nMetaparameters:'
@@ -178,6 +185,8 @@ for i in range(nt-1):
 		cov_inv=np.dot(np.dot(C,C.T), np.dot(W.T, W)/(xvar**2))
 		print cov_inv
 		
+		profmode.print_summary()
+	
 	if ESS<npcl/2:
 		resample()
 		resample_counter=0

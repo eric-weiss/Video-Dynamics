@@ -23,8 +23,8 @@ vid=1.0*vid/np.mean(np.abs(vid))
 
 nt,nx=vid.shape
 print vid.shape
-ns=256
-npcl=10
+ns=64
+npcl=100
 
 nsamps=10
 lrate=2e-6
