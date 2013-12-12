@@ -84,7 +84,10 @@ update_prop=theano.function([pnsteps, plr],ploss,updates=updates4,
 							allow_input_downcast=True,
 							on_unused_input='ignore')
 
-
+new_lrs=T.fvector()
+updates5 = model.set_rel_lrates(new_lrs)
+set_rel_lrates=theano.function([new_lrs],[],updates=updates5,
+							allow_input_downcast=True)
 
 e_hist=[]
 ess_hist=[]

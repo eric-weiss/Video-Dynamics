@@ -3,26 +3,25 @@ from matplotlib import pyplot as pp
 import theano
 import theano.tensor as T
 
-from theano import ProfileMode
-profmode = theano.ProfileMode(optimizer='fast_run', linker=theano.gof.OpWiseCLinker())
-
-import os
-
-os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
-
 import sys
 sys.path.insert(0, '../models')
 
-from LDmodel_2 import LDmodel
+from theano import ProfileMode
+profmode = theano.ProfileMode(optimizer='fast_run', linker=theano.gof.OpWiseCLinker())
+import os
+os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+
+
+from LDmodel_3 import LDmodel
 
 import math
 
 
-nx=256
+nx=6
 ns=2
-npcl=100
+npcl=20
 
-nsamps=30
+nsamps=10
 lrate=2e-5
 
 dt=0.05
@@ -116,6 +115,10 @@ update_prop=theano.function([pnsteps, plr],ploss,updates=updates4,
 							allow_input_downcast=True,
 							on_unused_input='ignore',mode=profmode)
 
+new_lrs=T.fvector()
+updates5 = model.set_rel_lrates(new_lrs)
+set_rel_lrs=theano.function([new_lrs],[],updates=updates5,
+							allow_input_downcast=True)
 
 
 e_hist=[]
@@ -157,7 +160,7 @@ for i in range(nt-1):
 		energy=learn_step(i,nsamps, lrate)
 		e_hist.append(energy)
 		learn_counter=0
-		pl=update_prop(10,1e-5)
+		pl=update_prop(100,1e-5)
 		ploss_hist.append(pl)
 		l_hist.append(1)
 		lrate=lrate*0.9997
@@ -173,7 +176,7 @@ for i in range(nt-1):
 		print 'M'
 		print model.M.get_value()
 		print 'W'
-		#print model.W.get_value()
+		print model.W.get_value()
 		print 'b'
 		print np.exp(model.ln_b.get_value())
 		print '\nMetaparameters:'
@@ -185,7 +188,11 @@ for i in range(nt-1):
 		cov_inv=np.dot(np.dot(C,C.T), np.dot(W.T, W)/(xvar**2))
 		print cov_inv
 		
-		profmode.print_summary()
+		#profmode.print_summary()
+	
+	if i==30000:
+		set_rel_lrs(np.asarray([0.0,1.0,1.0]))
+		print "CHANGED REL LRATES ====================================="
 	
 	if ESS<npcl/2:
 		resample()
@@ -248,7 +255,7 @@ pp.figure(6)
 pp.plot(u)
 
 pp.figure(7)
-pp.hist(u.flatten(),100)
+pp.hist(u.flatten(),1000)
 
 #pp.figure(5)
 #for i in range(npcl):

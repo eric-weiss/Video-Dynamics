@@ -146,13 +146,13 @@ class LDmodel():
 		#"re-center" the reweighting factors by adding a constant, 
 		#as this has no impact on the resulting new weights
 		
-		energies_recentered=energies-T.max(energies)
+		#energies_recentered=energies-T.max(energies)
 		
-		alpha=T.exp(energies_recentered) #these are the reweighting factors
+		alpha=T.exp(energies) #these are the reweighting factors
 		
-		new_weights_unnorm=self.weights_now*alpha
-		normalizer=T.sum(new_weights_unnorm)
-		new_weights=new_weights_unnorm/normalizer  #need to normalize new weights
+		new_weights=self.weights_now*alpha
+		#normalizer=T.sum(new_weights_unnorm)
+		#new_weights=new_weights_unnorm/normalizer  #need to normalize new weights
 		
 		updates[self.s_past]=T.cast(self.s_now,'float32')
 		
@@ -216,17 +216,21 @@ class LDmodel():
 	
 	def sample_joint(self, sp):
 		
-		t2_samp=self.theano_rng.multinomial(pvals=T.reshape(self.weights_now,(1,self.npcl))).T
-		s2_samp=T.cast(T.sum(self.s_now*T.addbroadcast(t2_samp,1),axis=0),'float32')
+		#t2_samp=self.theano_rng.multinomial(pvals=T.reshape(self.weights_now,(1,self.npcl))).T
+		#s2_samp=T.cast(T.sum(self.s_now*T.addbroadcast(t2_samp,1),axis=0),'float32')
+		t2_samp=self.sample_multinomial(self.weights_now,3)
+		s2_samp=self.s_now[t2_samp]
 		
 		diffs=(s2_samp-sp)
 		abs_term=T.sum(T.abs_(diffs)/self.b,axis=1)
 		alpha=T.exp(-abs_term)
-		probs_unnorm=self.weights_past*alpha
-		probs=probs_unnorm/T.sum(probs_unnorm)
+		probs=self.weights_past*alpha
+		#probs=probs_unnorm/T.sum(probs_unnorm)
 		
-		t1_samp=self.theano_rng.multinomial(pvals=T.reshape(probs,(1,self.npcl))).T
-		s1_samp=T.cast(T.sum(self.s_past*T.addbroadcast(t1_samp,1),axis=0),'float32')
+		#t1_samp=self.theano_rng.multinomial(pvals=T.reshape(probs,(1,self.npcl))).T
+		#s1_samp=T.cast(T.sum(self.s_past*T.addbroadcast(t1_samp,1),axis=0),'float32')
+		t1_samp=self.sample_multinomial(probs,3)
+		s1_samp=self.s_past[t1_samp]
 		
 		return [s1_samp, s2_samp]
 	
