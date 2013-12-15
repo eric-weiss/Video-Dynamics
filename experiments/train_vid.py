@@ -8,7 +8,7 @@ import cPickle as cp
 import sys
 sys.path.insert(0, '../models')
 
-from LDmodel_2 import LDmodel
+from LDmodel_2_vec import LDmodel
 
 import math
 
@@ -23,11 +23,11 @@ vid=1.0*vid/np.mean(np.abs(vid))
 
 nt,nx=vid.shape
 print vid.shape
-ns=64
+ns=32
 npcl=100
 
-nsamps=10
-lrate=2e-6
+nsamps=20
+lrate=2e-5
 
 npred=1000
 
@@ -124,11 +124,11 @@ for i in range(nt-1):
 	learn_counter+=1
 	resample_counter+=1
 	
-	if resample_counter>0 and learn_counter>100:
+	if resample_counter>0 and learn_counter>10:
 		energy=learn_step(i,nsamps, lrate)
 		e_hist.append(energy)
 		learn_counter=0
-		pl=update_prop(800,1e-8)
+		pl=update_prop(800,1e-6)
 		ploss_hist.append(pl)
 		l_hist.append(1)
 		lrate=lrate*0.9997

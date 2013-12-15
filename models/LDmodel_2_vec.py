@@ -8,8 +8,8 @@ import math
 import theano
 import theano.tensor as T
 
-#from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
-from theano.tensor.shared_randomstreams import RandomStreams
+from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
+#from theano.tensor.shared_randomstreams import RandomStreams
 
 class LDmodel():
 	
@@ -51,7 +51,7 @@ class LDmodel():
 		
 		#sparsity parameters
 		#parametrized as the exponent of ln_b to ensure positivity
-		init_ln_b=np.asarray(np.zeros(ns),dtype='float32')
+		init_ln_b=np.asarray(-np.ones(ns),dtype='float32')
 		
 		self.W=theano.shared(init_W)
 		self.M=theano.shared(init_M)
@@ -59,6 +59,7 @@ class LDmodel():
 		
 		#for ease of use
 		self.b=T.exp(self.ln_b)
+		self.br=T.reshape(self.b,(ns,1))
 		
 		#square root of covariance matrix of proposal distribution
 		#initialized to the true root covariance
@@ -98,9 +99,10 @@ class LDmodel():
 		self.theano_rng = RandomStreams()
 		
 		self.init_multi_samp=theano.shared(np.asarray(np.arange(npcl),dtype='int64'))
+		self.idx_helper=theano.shared(np.asarray(np.arange(npcl),dtype='int64'))
 		
 		self.params=							[self.W, self.M, self.ln_b]
-		self.rel_lrates=theano.shared(np.asarray([  1.0,    1.0,     1.0]   ,dtype='float32'))
+		self.rel_lrates=theano.shared(np.asarray([  1.0,    1000.0,     1.0]   ,dtype='float32'))
 		
 		self.meta_params=     							[self.C]
 		self.meta_rel_lrates=theano.shared(np.asarray([   1.0  ], dtype='float32'))
@@ -182,7 +184,7 @@ class LDmodel():
 		
 		loss=self.proposal_loss(C_now)
 		gr=T.grad(loss, C_now)
-		return [C_now-lr*gr], theano.scan_module.until(loss<1e-6)
+		return [C_now-lr*gr, loss], theano.scan_module.until(loss<1e-2)
 	
 	
 	def update_proposal_distrib(self, n_steps, lr):
@@ -190,8 +192,8 @@ class LDmodel():
 		#does some gradient descent on self.C, so that self.CCT becomes
 		#closer to the true posterior covariance
 		C0=self.C
-		Cs, updates = theano.scan(fn=self.prop_update_step,
-									outputs_info=[C0],
+		[Cs, lhist], updates = theano.scan(fn=self.prop_update_step,
+									outputs_info=[C0, None],
 									non_sequences=[lr],
 									n_steps=n_steps)
 		
@@ -240,13 +242,20 @@ class LDmodel():
 		
 		sp_big=T.reshape(T.extra_ops.repeat(sp,self.npcl,axis=1).T,(self.ns, self.npcl**2))
 		
-		idxs=self.sample_multinomial(self.weights_now,4)
-		s2_samps=self.s_now[idxs]
+		#s2_idxs=self.sample_multinomial_vec(self.weights_now,4)
+		s2_idxs=T.sum(self.idx_mat*self.theano_rng.multinomial(pvals=T.extra_ops.repeat(T.reshape(self.weights_now,(1,self.npcl)),self.npcl,axis=0)),axis=1)
+		
+		s2_samps=self.s_now[s2_idxs]
 		
 		s2_big=T.extra_ops.repeat(s2_samps,self.npcl,axis=0).T #ns by npcl^2
 		
-		diffs=T.sum(T.abs_(sp_big-s2_big)/self.b,axis=0)
+		diffs=T.sum(T.abs_(sp_big-s2_big)/self.br,axis=0)
+		#diffs=T.sum(T.abs_(sp_big-s2_big),axis=0)
+		probs_unnorm=self.weights_past*T.exp(-T.reshape(diffs,(self.npcl,self.npcl)))
 		
+		#s1_idxs=self.sample_multinomial_mat(probs_unnorm,4)
+		s1_idxs=T.sum(self.idx_mat*self.theano_rng.multinomial(pvals=probs_unnorm),axis=1)
+		s1_samps=self.s_past[s1_idxs]
 		
 		x2_recons=T.dot(self.W, s2_samps.T)
 		
@@ -264,6 +273,8 @@ class LDmodel():
 		learning_params=[self.params[i] for i in range(len(self.params)) if self.rel_lrates[i]!=0.0]
 		learning_rel_lrates=[self.rel_lrates[i] for i in range(len(self.params)) if self.rel_lrates[i]!=0.0]
 		gparams=T.grad(energy, learning_params, consider_constant=[s1_samps, s2_samps])
+		
+		updates={}
 		
 		# constructs the update dictionary
 		for gparam, param, rel_lr in zip(gparams, learning_params, learning_rel_lrates):
@@ -287,9 +298,10 @@ class LDmodel():
 	def resample(self):
 		
 		updates={}
-		#samp=self.theano_rng.multinomial(size=self.weights_now.shape,pvals=self.weights_now)
-		idxs=self.sample_multinomial(self.weights_now,3)
-		#idxs=T.cast(T.sum(samp*self.idx_mat,axis=1),'int32')
+		#samp=self.theano_rng.multinomial(pvals=self.weights_now)
+		#idxs=self.sample_multinomial_vec(self.weights_now,3)
+		samp=self.theano_rng.multinomial(pvals=T.extra_ops.repeat(T.reshape(self.weights_now,(1,self.npcl)),self.npcl,axis=0))
+		idxs=T.cast(T.sum(samp*self.idx_mat.T,axis=1),'int32')
 		s_samps=self.s_now[idxs]
 		updates[self.s_now]=s_samps
 		updates[self.weights_now]=T.cast(T.ones_like(self.weights_now)/T.cast(self.npcl,'float32'),'float32') #dtype paranoia
@@ -319,34 +331,68 @@ class LDmodel():
 		
 		return sp, xp, updates
 	
-	
-	def multinomial_step(self,samp,weights):
+
+	#def multinomial_step_vec(self,samp,weights):
 		
-		u=self.theano_rng.uniform(size=self.weights_now.shape)
-		i=self.theano_rng.random_integers(size=self.weights_now.shape, low=0, high=self.npcl-1)
-		Wnow=weights[samp]
-		Wstep=weights[i]
-		probs=Wstep/Wnow
-		out=T.switch(u<probs, i, samp)
-		return out
+		#u=self.theano_rng.uniform(size=self.weights_now.shape)
+		#i=self.theano_rng.random_integers(size=self.weights_now.shape, low=0, high=self.npcl-1)
+		#Wnow=weights[samp]
+		#Wstep=weights[i]
+		#probs=Wstep/Wnow
+		#out=T.switch(u<probs, i, samp)
+		#return out
 	
 	
-	def sample_multinomial(self,weights,nsteps):
+	#def sample_multinomial_vec(self,weights,nsteps):
 		
-		#this function samples from a multinomial distribution using
-		#the Metropolis method as in [Murray, Lee, Jacob 2013]
-		#weights are unnormalized
-		#this is biased for small nsteps, but could be faster than the
-		#native theano multinomial sampler and the use of unnormalized
-		#weights improves numerical stability
-		samp0=self.init_multi_samp
-		samps, updates = theano.scan(fn=self.multinomial_step,
-										outputs_info=[samp0],
-										non_sequences=[weights],
-										n_steps=nsteps)
+		##this function samples from a multinomial distribution using
+		##the Metropolis method as in [Murray, Lee, Jacob 2013]
+		##weights are unnormalized
+		##this is biased for small nsteps, but could be faster than the
+		##native theano multinomial sampler and the use of unnormalized
+		##weights improves numerical stability
 		
-		return samps[-1]
+		##in this version 'weights' is assumed to be a vector, so that
+		##the same distribution is sampled len(weights) times
+		#samp0=self.init_multi_samp
+		#samps, updates = theano.scan(fn=self.multinomial_step_vec,
+										#outputs_info=[samp0],
+										#non_sequences=[weights],
+										#n_steps=nsteps)
+		
+		#return samps[-1]
 	
+	
+	#def multinomial_step_mat(self,samp,weights):
+		
+		#u=self.theano_rng.uniform(size=self.weights_now.shape)
+		#i=self.theano_rng.random_integers(size=self.weights_now.shape, low=0, high=self.npcl-1)
+		#Wnow=weights[self.idx_helper,samp]
+		#Wstep=weights[self.idx_helper,i]
+		#probs=Wstep/Wnow
+		#out=T.switch(u<probs, i, samp)
+		#return out
+	
+	
+	#def sample_multinomial_mat(self,weights,nsteps):
+		
+		##this function samples from a multinomial distribution using
+		##the Metropolis method as in [Murray, Lee, Jacob 2013]
+		##weights are unnormalized
+		##this is biased for small nsteps, but could be faster than the
+		##native theano multinomial sampler and the use of unnormalized
+		##weights improves numerical stability
+		
+		##in this version 'weights' is a matrix, so that we get samples
+		##from different distributions
+		#samp0=self.init_multi_samp
+		#samps, updates = theano.scan(fn=self.multinomial_step_mat,
+										#outputs_info=[samp0],
+										#non_sequences=[weights],
+										#n_steps=nsteps)
+		
+		#return samps[-1]
+
 	
 	def set_rel_lrates(self, new_rel_lrates):
 		updates={}

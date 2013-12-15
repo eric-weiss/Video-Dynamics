@@ -12,16 +12,16 @@ import os
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
 
-from LDmodel_3 import LDmodel
+from LDmodel_2_vec import LDmodel
 
 import math
 
 
-nx=6
+nx=64
 ns=2
-npcl=20
+npcl=100
 
-nsamps=10
+nsamps=20
 lrate=2e-5
 
 dt=0.05
@@ -175,8 +175,8 @@ for i in range(nt-1):
 		print '\nParameters'
 		print 'M'
 		print model.M.get_value()
-		print 'W'
-		print model.W.get_value()
+		#print 'W'
+		#print model.W.get_value()
 		print 'b'
 		print np.exp(model.ln_b.get_value())
 		print '\nMetaparameters:'
