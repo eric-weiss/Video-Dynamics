@@ -17,7 +17,7 @@ from LDmodel_2_vec import LDmodel
 import math
 
 
-nx=64
+nx=8
 ns=2
 npcl=100
 

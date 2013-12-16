@@ -12,7 +12,7 @@ from LDmodel_2_vec import LDmodel
 
 import math
 
-f=open('../vid1.cpl','rb')
+f=open('../vid3.cpl','rb')
 vid=cp.load(f)
 f.close()
 
@@ -23,7 +23,7 @@ vid=1.0*vid/np.mean(np.abs(vid))
 
 nt,nx=vid.shape
 print vid.shape
-ns=32
+ns=20
 npcl=100
 
 nsamps=20
@@ -101,83 +101,92 @@ th=[]
 
 resample_counter=0
 learn_counter=0
-
-for i in range(nt-1):
-	
-	#normalizer,energies,ssamps,spreds,WTx=inference_step(vec)
-	#normalizer,energies=inference_step(x)
-	#h_samps=inference_step(i)
-	inference_step(i)
-	
-	#pp.scatter(ssamps[:,0],ssamps[:,1],color='b')
-	#pp.scatter(spreds[:,0],spreds[:,1],color='r')
-	#pp.scatter(WTx[0],WTx[1],color='g')
-	
-	#pp.hist(energies,20)
-	#pp.show()
-	
-	#print h_samps
-	
-	
-	ESS=get_ESS()
-	ess_hist.append(ESS)
-	learn_counter+=1
-	resample_counter+=1
-	
-	if resample_counter>0 and learn_counter>10:
-		energy=learn_step(i,nsamps, lrate)
-		e_hist.append(energy)
-		learn_counter=0
-		pl=update_prop(800,1e-6)
-		ploss_hist.append(pl)
-		l_hist.append(1)
-		lrate=lrate*0.9997
-	else:
-		l_hist.append(0)
-	
-	if i%1000==0:	
-		#print normalizer
+for epoch in range(4):
+	for i in range(nt-1):
 		
-		print 'Iteration ', i, ' ================================'
-		print 'ESS: ', ESS
-		#print '\nParameters'
-		#print 'M'
-		#print model.M.get_value()
-		#print 'W'
-		#print model.W.get_value()
-		#print 'b'
-		#print np.exp(model.ln_b.get_value())
-		print '\nMetaparameters:'
-		print 'Proposal loss: ', ploss_hist[-1]
-		print 'CCT-dot-true inverse covariance'
-		#W=model.W.get_value()
-		#b=np.exp(model.ln_b.get_value())
-		#C=model.C.get_value()
-		#cov_inv=np.dot(np.dot(C,C.T), np.dot(W.T, W)/(xvar**2))
-		#print cov_inv
+		#normalizer,energies,ssamps,spreds,WTx=inference_step(vec)
+		#normalizer,energies=inference_step(x)
+		#h_samps=inference_step(i)
+		inference_step(i)
 		
-	if ESS<npcl/2:
-		resample()
-		resample_counter=0
-		r_hist.append(1)
-	else:
-		r_hist.append(0)
-	
-	s_hist.append(model.s_now.get_value())
-	w_hist.append(model.weights_now.get_value())
-	
-	if math.isnan(ESS):
-		print '\nSAMPLING ERROR===================\n'
-		print 'Proposal loss: ', ploss_hist[-1]
-		print 'CCT-dot-true inverse covariance'
-		cov_inv=np.dot(np.dot(C,C.T), np.dot(W.T, W)/(xvar**2))
-		print cov_inv
-		break
+		#pp.scatter(ssamps[:,0],ssamps[:,1],color='b')
+		#pp.scatter(spreds[:,0],spreds[:,1],color='r')
+		#pp.scatter(WTx[0],WTx[1],color='g')
+		
+		#pp.hist(energies,20)
+		#pp.show()
+		
+		#print h_samps
+		
+		
+		ESS=get_ESS()
+		ess_hist.append(ESS)
+		learn_counter+=1
+		resample_counter+=1
+		
+		if resample_counter>0 and learn_counter>10:
+			energy=learn_step(i,nsamps, lrate)
+			e_hist.append(energy)
+			learn_counter=0
+			pl=update_prop(800,1e-7)
+			#pp.plot(pl)
+			#pp.show()
+			ploss_hist.append(pl)
+			l_hist.append(1)
+			lrate=lrate*0.9999
+		else:
+			l_hist.append(0)
+		
+		if i%1000==0:	
+			#print normalizer
+			
+			print 'Iteration ', i+nt*epoch, ' ================================'
+			print 'ESS: ', ESS
+			#print '\nParameters'
+			#print 'M'
+			#print model.M.get_value()
+			#print 'W'
+			#print model.W.get_value()
+			#print 'b'
+			print np.exp(model.ln_b.get_value())
+			print '\nMetaparameters:'
+			print 'Proposal loss: ', ploss_hist[-1]
+			print 'CCT-dot-true inverse covariance'
+			#W=model.W.get_value()
+			#b=np.exp(model.ln_b.get_value())
+			#C=model.C.get_value()
+			#cov_inv=np.dot(np.dot(C,C.T), np.dot(W.T, W)/(xvar**2))
+			#print cov_inv
+			#print model.weights_now.get_value()
+			
+		if ESS<npcl/2:
+			resample()
+			resample_counter=0
+			r_hist.append(1)
+		else:
+			r_hist.append(0)
+		
+		s_hist.append(model.s_now.get_value())
+		w_hist.append(model.weights_now.get_value())
+		
+		if math.isnan(ESS):
+			print '\nSAMPLING ERROR===================\n'
+			print 'Proposal loss: ', ploss_hist[-1]
+			print 'CCT-dot-true inverse covariance'
+			cov_inv=np.dot(np.dot(C,C.T), np.dot(W.T, W)/(xvar**2))
+			print cov_inv
+			break
 
 W=model.W.get_value()
 M=model.M.get_value()
 b=np.exp(model.ln_b.get_value())
 C=model.C.get_value()
+
+f=open('W.cpl','wb')
+cp.dump(W,f,2)
+cp.dump(M,f,2)
+cp.dump(b,f,2)
+f.close()
 
 #print spred.shape
 #print spred
@@ -201,21 +210,21 @@ l_hist=np.asarray(l_hist)-.5
 r_hist=np.asarray(r_hist)-.5
 
 
-pp.figure(3)
-pp.plot(e_hist)
-pp.figure(4)
-pp.plot(s_av)
+#pp.figure(3)
+#pp.plot(e_hist)
+#pp.figure(4)
+#pp.plot(s_av)
 #pp.plot(r_hist, 'r')
 #pp.plot(l_hist, 'k')
 
 pp.figure(5)
 pp.plot(ess_hist)
 
-pp.figure(6)
-pp.plot(u)
+#pp.figure(6)
+#pp.plot(u)
 
-pp.figure(7)
-pp.hist(u.flatten(),100)
+#pp.figure(7)
+#pp.hist(u.flatten(),100)
 
 #pp.figure(5)
 #for i in range(npcl):
