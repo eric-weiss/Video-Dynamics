@@ -37,7 +37,7 @@ class LDmodel():
 	'''
 	
 	
-	def __init__(self, nx, ns, npcl, xvar=1.0):
+	def __init__(self, nx, ns, npcl, nsamps, xvar=1.0):
 		
 		#generative matrix
 		init_W=np.asarray(np.random.randn(nx,ns)/0.1,dtype='float32')
@@ -87,10 +87,15 @@ class LDmodel():
 		self.nx=nx		#dimensionality of observed variables
 		self.ns=ns		#dimensionality of latent variables
 		self.npcl=npcl	#numer of particles in particle filter
+		self.nsamps=nsamps #number of samples to draw from the joint during learning
 		
 		#this is used for the resampling
-		nummat=np.repeat(np.reshape(np.arange(npcl),(npcl,1)),npcl,axis=1)
-		self.idx_mat=theano.shared(nummat.T)
+		nummat1=np.repeat(np.reshape(np.arange(npcl),(npcl,1)),npcl,axis=1)
+		self.res_mat=theano.shared(nummat1.T)
+		
+		#this is used for sampling from the joint distribution
+		nummat2=np.repeat(np.reshape(np.arange(npcl),(npcl,1)),nsamps,axis=1)
+		self.sam_mat=theano.shared(nummat2.T)
 		
 		#for ease of use and efficient computation (these are used a lot)
 		self.CCT=T.dot(self.C, self.C.T)
@@ -233,28 +238,28 @@ class LDmodel():
 		return [s1_samp, s2_samp]
 	
 	
-	def update_params(self, x1, x2, n_samps, lrate):
+	def update_params(self, x1, x2, lrate):
 		
 		#this function samples from the joint posterior and performs
 		# a step of gradient ascent on the log-likelihood
 		
 		sp=self.get_prediction(self.s_past)
 		
-		sp_big=T.reshape(T.extra_ops.repeat(sp,self.npcl,axis=1).T,(self.ns, self.npcl**2))
+		sp_big=T.reshape(T.extra_ops.repeat(sp,self.nsamps,axis=1).T,(self.ns, self.npcl*self.nsamps))
 		
 		#s2_idxs=self.sample_multinomial_vec(self.weights_now,4)
-		s2_idxs=T.sum(self.idx_mat*self.theano_rng.multinomial(pvals=T.extra_ops.repeat(T.reshape(self.weights_now,(1,self.npcl)),self.npcl,axis=0)),axis=1)
+		s2_idxs=T.sum(self.sam_mat*self.theano_rng.multinomial(pvals=T.extra_ops.repeat(T.reshape(self.weights_now,(1,self.npcl)),self.nsamps,axis=0)),axis=1)
 		
-		s2_samps=self.s_now[s2_idxs]
+		s2_samps=self.s_now[s2_idxs] #ns by nsamps
 		
-		s2_big=T.extra_ops.repeat(s2_samps,self.npcl,axis=0).T #ns by npcl^2
+		s2_big=T.extra_ops.repeat(s2_samps,self.npcl,axis=0).T #ns by npcl*nsamps
 		
 		diffs=T.sum(T.abs_(sp_big-s2_big)/self.br,axis=0)
 		#diffs=T.sum(T.abs_(sp_big-s2_big),axis=0)
-		probs_unnorm=self.weights_past*T.exp(-T.reshape(diffs,(self.npcl,self.npcl)))
+		probs_unnorm=self.weights_past*T.exp(-T.reshape(diffs,(self.nsamps,self.npcl)))
 		
 		#s1_idxs=self.sample_multinomial_mat(probs_unnorm,4)
-		s1_idxs=T.sum(self.idx_mat*self.theano_rng.multinomial(pvals=probs_unnorm),axis=1)
+		s1_idxs=T.sum(self.sam_mat*self.theano_rng.multinomial(pvals=probs_unnorm),axis=1)
 		s1_samps=self.s_past[s1_idxs]
 		
 		x2_recons=T.dot(self.W, s2_samps.T)
@@ -301,7 +306,7 @@ class LDmodel():
 		#samp=self.theano_rng.multinomial(pvals=self.weights_now)
 		#idxs=self.sample_multinomial_vec(self.weights_now,3)
 		samp=self.theano_rng.multinomial(pvals=T.extra_ops.repeat(T.reshape(self.weights_now,(1,self.npcl)),self.npcl,axis=0))
-		idxs=T.cast(T.sum(samp*self.idx_mat.T,axis=1),'int32')
+		idxs=T.cast(T.sum(samp*self.res_mat.T,axis=1),'int32')
 		s_samps=self.s_now[idxs]
 		updates[self.s_now]=s_samps
 		updates[self.weights_now]=T.cast(T.ones_like(self.weights_now)/T.cast(self.npcl,'float32'),'float32') #dtype paranoia

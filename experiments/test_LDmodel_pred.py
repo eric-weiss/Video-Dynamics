@@ -12,17 +12,17 @@ import os
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
 
-from LDmodel_2_vec import LDmodel
+from LDmodel_pred_prop import LDmodel
 
 import math
 
 
-nx=8
+nx=6
 ns=2
-npcl=50
+npcl=100
 
-nsamps=10
-lrate=2e-5
+nsamps=20
+lrate=2e-7
 
 dt=0.05
 nt=200000
@@ -33,7 +33,7 @@ npred=1000
 
 x_hist=[]
 
-theta=0.1
+theta=0.001
 vec=np.ones(2)
 M=np.asarray([[np.cos(theta),-np.sin(theta)],[np.sin(theta),np.cos(theta)]],dtype='float32')
 W=np.asarray(np.random.randn(nx,2),dtype='float32')
@@ -66,7 +66,7 @@ xdata=theano.shared(x_hist)
 
 xvar=0.1
 
-model=LDmodel(nx, ns, npcl, nsamps, xvar=xvar)
+model=LDmodel(nx, ns, npcl, nsamps, xvar=xvar, init_W=W)
 
 idx=T.lscalar()
 x1=T.fvector()
@@ -108,12 +108,6 @@ sps, xps, updates3 = model.simulate_forward(nps)
 predict=theano.function([nps],[sps,xps],updates=updates3,allow_input_downcast=True)
 
 
-plr=T.fscalar()
-pnsteps=T.lscalar()
-ploss, updates4 = model.update_proposal_distrib(pnsteps,plr)
-update_prop=theano.function([pnsteps, plr],ploss,updates=updates4,
-							allow_input_downcast=True,
-							on_unused_input='ignore')
 
 new_lrs=T.fvector()
 updates5 = model.set_rel_lrates(new_lrs)
@@ -160,8 +154,6 @@ for i in range(nt-1):
 		energy=learn_step(i, lrate)
 		e_hist.append(energy)
 		learn_counter=0
-		pl=update_prop(100,1e-5)
-		ploss_hist.append(pl)
 		l_hist.append(1)
 		lrate=lrate*0.9997
 	else:
@@ -179,14 +171,8 @@ for i in range(nt-1):
 		#print model.W.get_value()
 		print 'b'
 		print np.exp(model.ln_b.get_value())
-		print '\nMetaparameters:'
-		print 'Proposal loss: ', ploss_hist[-1]
-		print 'CCT-dot-true inverse covariance'
 		W=model.W.get_value()
 		b=np.exp(model.ln_b.get_value())
-		C=model.C.get_value()
-		cov_inv=np.dot(np.dot(C,C.T), np.dot(W.T, W)/(xvar**2))
-		print cov_inv
 		
 		#profmode.print_summary()
 	
@@ -206,13 +192,8 @@ for i in range(nt-1):
 	
 	if math.isnan(ESS):
 		print '\nSAMPLING ERROR===================\n'
-		print 'Proposal loss: ', ploss_hist[-1]
-		print 'CCT-dot-true inverse covariance'
 		W=model.W.get_value()
 		b=np.exp(model.ln_b.get_value())
-		C=model.C.get_value()
-		cov_inv=np.dot(np.dot(C,C.T), np.dot(W.T, W)/(xvar**2))
-		print cov_inv
 		break
 
 
@@ -254,8 +235,8 @@ pp.plot(ess_hist)
 pp.figure(6)
 pp.plot(u)
 
-pp.figure(7)
-pp.hist(u.flatten(),1000)
+#pp.figure(7)
+#pp.hist(u.flatten(),1000)
 
 #pp.figure(5)
 #for i in range(npcl):
@@ -278,9 +259,6 @@ pp.figure(8)
 pp.plot(xpred[:,:,0],'r')
 pp.plot(xact,'b')
 
-ploss_hist=np.asarray(ploss_hist)
-pp.figure(9)
-pp.plot(ploss_hist)
 
 #pp.figure(6)
 #for i in range(npcl):

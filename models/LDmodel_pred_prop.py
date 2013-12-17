@@ -27,24 +27,18 @@ class LDmodel():
 	s_(t+1) = M*s_t + u
 	x_t = W*s_t + n
 	
-	Approximate EM learning is performed via minibatched gradient 
-	ascent on the log-likelihood. Inference/sampling is achieved with
-	particle filtering. The proposal distribution in the particle filter
-	ignores (for now) the predictive part and samples directly from the
-	posterior specified by the generative part (as if the top equation
-	didn't exist.)
+	In this version the proposal distribution is just the predictive
+	part, not the generative part.
 	
 	'''
 	
 	
-	def __init__(self, nx, ns, npcl, xvar=1.0):
+	def __init__(self, nx, ns, npcl, nsamps, xvar=1.0, init_W=None):
 		
 		#generative matrix
-		init_W=np.asarray(np.random.randn(nx,ns)/0.1,dtype='float32')
+		if init_W==None:
+			init_W=np.asarray(np.random.randn(nx,ns)/0.1,dtype='float32')
 		
-		#normalize the columns of W to be unit length
-		#(maybe unnecessary if sampling?)
-		init_W=init_W/np.sqrt(np.sum(init_W**2,axis=0))
 		
 		#dynamical matrix
 		init_M=np.asarray(np.eye(ns),dtype='float32')
@@ -61,20 +55,11 @@ class LDmodel():
 		self.b=T.exp(self.ln_b)
 		self.br=T.reshape(self.b,(ns,1))
 		
-		#square root of covariance matrix of proposal distribution
-		#initialized to the true root covariance
-		init_cov_inv=np.dot(init_W.T, init_W)/(xvar**2) + 0.5*np.eye(ns)*np.exp(-2.0*init_ln_b)
-		init_cov=spla.inv(init_cov_inv)
-		init_C=spla.sqrtm(init_cov)
-		init_C=np.asarray(np.real(init_C),dtype='float32')
-		
 		init_s_now=np.asarray(np.zeros((npcl,ns)),dtype='float32')
 		init_weights_now=np.asarray(np.ones(npcl)/float(npcl),dtype='float32')
 		
 		init_s_past=np.asarray(np.zeros((npcl,ns)),dtype='float32')
 		init_weights_past=np.asarray(np.ones(npcl)/float(npcl),dtype='float32')
-		
-		self.C=theano.shared(init_C)
 		
 		self.s_now=theano.shared(init_s_now)
 		self.weights_now=theano.shared(init_weights_now)
@@ -87,14 +72,15 @@ class LDmodel():
 		self.nx=nx		#dimensionality of observed variables
 		self.ns=ns		#dimensionality of latent variables
 		self.npcl=npcl	#numer of particles in particle filter
+		self.nsamps=nsamps  #number of samples to draw from the joint during learning
 		
 		#this is used for the resampling
-		nummat=np.repeat(np.reshape(np.arange(npcl),(npcl,1)),npcl,axis=1)
-		self.idx_mat=theano.shared(nummat.T)
+		nummat1=np.repeat(np.reshape(np.arange(npcl),(npcl,1)),npcl,axis=1)
+		self.res_mat=theano.shared(nummat1.T)
 		
-		#for ease of use and efficient computation (these are used a lot)
-		self.CCT=T.dot(self.C, self.C.T)
-		self.cov_inv=T.dot(self.W.T, self.W)/(self.xvar**2) + 0.5*T.eye(self.ns)/(self.b**2)
+		#this is used for sampling from the joint distribution
+		nummat2=np.repeat(np.reshape(np.arange(npcl),(npcl,1)),nsamps,axis=1)
+		self.sam_mat=theano.shared(nummat2.T)
 		
 		self.theano_rng = RandomStreams()
 		
@@ -102,47 +88,37 @@ class LDmodel():
 		self.idx_helper=theano.shared(np.asarray(np.arange(npcl),dtype='int64'))
 		
 		self.params=							[self.W, self.M, self.ln_b]
-		self.rel_lrates=theano.shared(np.asarray([  0.1,    100.0,     1.0]   ,dtype='float32'))
-		
-		self.meta_params=     							[self.C]
-		self.meta_rel_lrates=theano.shared(np.asarray([   1.0  ], dtype='float32'))
+		self.rel_lrates=theano.shared(np.asarray([  0.0,    1.0,     1.0]   ,dtype='float32'))
 	
 	
-	def sample_proposal_s(self, s, xp):
+	def sample_proposal_s(self):
 		
 		#s is npcl-by-ns
-		#xp is 1-by-nx
 		
-		n=self.theano_rng.normal(size=T.shape(self.s_now))
+		u=self.theano_rng.uniform(size=T.shape(self.s_now))-0.5
 		
-		mean_term=T.dot(xp, self.W)/(self.xvar**2) + T.dot(s,self.M.T*0.5/(self.b**2))
-		prop_mean=T.dot(mean_term, self.CCT)
+		mean_term=self.get_prediction(self.s_now)
 		
-		s_prop=prop_mean + T.dot(n, self.C)
-		
-		#I compute the term inside the exponent for the pdf of the proposal distrib
-		prop_term=-T.sum(n**2)/2.0
+		s_prop=mean_term-T.sgn(u)*T.log(1.0-2.0*T.abs_(u))*self.b
 		
 		#return T.cast(s_prop,'float32'), T.cast(s_pred,'float32'), T.cast(prop_term,'float32'), prop_mean
-		return s_prop, prop_term, prop_mean
+		return s_prop
 	
 	
 	def forward_filter_step(self, xp):
 		
 		#need to sample from the proposal distribution first
-		s_samps, prop_terms, prop_means = self.sample_proposal_s(self.s_now, xp)
+		s_samps = self.sample_proposal_s()
 		
 		updates={}
 		
 		#now that we have samples from the proposal distribution, we need to reweight them
 		
 		recons=T.dot(self.W, s_samps.T)
-		s_pred=self.get_prediction(self.s_now)
 		
 		x_terms=-T.sum((recons-T.reshape(xp,(self.nx,1)))**2,axis=0)/(2.0*self.xvar**2)
-		s_terms=-T.sum(T.abs_((s_samps-s_pred)/self.b),axis=1)
 		
-		energies=x_terms+s_terms-prop_terms
+		energies=x_terms
 		
 		#to avoid exponentiating large or very small numbers, I 
 		#"re-center" the reweighting factors by adding a constant, 
@@ -169,46 +145,6 @@ class LDmodel():
 		return updates
 	
 	
-	def proposal_loss(self,C):
-		
-		#calculates how far off self.CCT is from the true posterior covariance
-		CCT=T.dot(C, C.T)
-		prod=T.dot(CCT, self.cov_inv)
-		diff=prod-T.eye(self.ns)
-		tot=T.sum(T.sum(diff**2))  #frobenius norm
-		
-		return tot
-	
-	
-	def prop_update_step(self, C_now, lr):
-		
-		loss=self.proposal_loss(C_now)
-		gr=T.grad(loss, C_now)
-		return [C_now-lr*gr, loss], theano.scan_module.until(loss<1e-3)
-	
-	
-	def update_proposal_distrib(self, n_steps, lr):
-		
-		#does some gradient descent on self.C, so that self.CCT becomes
-		#closer to the true posterior covariance
-		C0=self.C
-		[Cs, lhist], updates = theano.scan(fn=self.prop_update_step,
-									outputs_info=[C0, None],
-									non_sequences=[lr],
-									n_steps=n_steps)
-		
-		updates[self.C]=Cs[-1]
-		
-		loss=self.proposal_loss(Cs[-1])
-		
-		#updates={}
-		#updates[self.C]=self.prop_update_step(self.C,lr)
-		#loss=self.proposal_loss(self.C)
-		
-		return loss, updates
-		
-	
-	
 	def get_prediction(self, s):
 		
 		s_pred=T.dot(s, self.M)
@@ -233,28 +169,28 @@ class LDmodel():
 		return [s1_samp, s2_samp]
 	
 	
-	def update_params(self, x1, x2, n_samps, lrate):
+	def update_params(self, x1, x2, lrate):
 		
 		#this function samples from the joint posterior and performs
 		# a step of gradient ascent on the log-likelihood
 		
 		sp=self.get_prediction(self.s_past)
 		
-		sp_big=T.reshape(T.extra_ops.repeat(sp,self.npcl,axis=1).T,(self.ns, self.npcl**2))
+		sp_big=T.reshape(T.extra_ops.repeat(sp,self.nsamps,axis=1).T,(self.ns, self.npcl*self.nsamps))
 		
 		#s2_idxs=self.sample_multinomial_vec(self.weights_now,4)
-		s2_idxs=T.sum(self.idx_mat*self.theano_rng.multinomial(pvals=T.extra_ops.repeat(T.reshape(self.weights_now,(1,self.npcl)),self.npcl,axis=0)),axis=1)
+		s2_idxs=T.sum(self.sam_mat*self.theano_rng.multinomial(pvals=T.extra_ops.repeat(T.reshape(self.weights_now,(1,self.npcl)),self.nsamps,axis=0)),axis=1)
 		
-		s2_samps=self.s_now[s2_idxs]
+		s2_samps=self.s_now[s2_idxs] #ns by nsamps
 		
-		s2_big=T.extra_ops.repeat(s2_samps,self.npcl,axis=0).T #ns by npcl^2
+		s2_big=T.extra_ops.repeat(s2_samps,self.npcl,axis=0).T #ns by npcl*nsamps
 		
 		diffs=T.sum(T.abs_(sp_big-s2_big)/self.br,axis=0)
 		#diffs=T.sum(T.abs_(sp_big-s2_big),axis=0)
-		probs_unnorm=self.weights_past*T.exp(-T.reshape(diffs,(self.npcl,self.npcl)))
+		probs_unnorm=self.weights_past*T.exp(-T.reshape(diffs,(self.nsamps,self.npcl)))
 		
 		#s1_idxs=self.sample_multinomial_mat(probs_unnorm,4)
-		s1_idxs=T.sum(self.idx_mat*self.theano_rng.multinomial(pvals=probs_unnorm),axis=1)
+		s1_idxs=T.sum(self.sam_mat*self.theano_rng.multinomial(pvals=probs_unnorm),axis=1)
 		s1_samps=self.s_past[s1_idxs]
 		
 		x2_recons=T.dot(self.W, s2_samps.T)
@@ -301,7 +237,7 @@ class LDmodel():
 		#samp=self.theano_rng.multinomial(pvals=self.weights_now)
 		#idxs=self.sample_multinomial_vec(self.weights_now,3)
 		samp=self.theano_rng.multinomial(pvals=T.extra_ops.repeat(T.reshape(self.weights_now,(1,self.npcl)),self.npcl,axis=0))
-		idxs=T.cast(T.sum(samp*self.idx_mat.T,axis=1),'int32')
+		idxs=T.cast(T.sum(samp*self.res_mat.T,axis=1),'int32')
 		s_samps=self.s_now[idxs]
 		updates[self.s_now]=s_samps
 		updates[self.weights_now]=T.cast(T.ones_like(self.weights_now)/T.cast(self.npcl,'float32'),'float32') #dtype paranoia

@@ -35,22 +35,12 @@ xdata=theano.shared(vid)
 
 xvar=0.1
 
-model=LDmodel(nx, ns, npcl, xvar=xvar)
+model=LDmodel(nx, ns, npcl,nsamps xvar=xvar)
 
 idx=T.lscalar()
 x1=T.fvector()
 x2=T.fvector()
 
-#norm, eng, ssmp, sprd, Wx, updates0=model.forward_filter_step(x)
-#norm, eng, updates0=model.forward_filter_step(x)
-#inference_step=theano.function([x],[norm,eng,ssmp,sprd,Wx],updates=updates0,allow_input_downcast=True)
-#inference_step=theano.function([x],[norm,eng],updates=updates0,allow_input_downcast=True)
-
-#hsmps, updates0=model.forward_filter_step(x1)
-#inference_step=theano.function([idx],hsmps,
-								#updates=updates0,
-								#givens={x1: xdata[idx,:]},
-								#allow_input_downcast=True)
 								
 updates0=model.forward_filter_step(x1)
 inference_step=theano.function([idx],None,
@@ -64,10 +54,10 @@ get_ESS=theano.function([],ess)
 updates1=model.resample()
 resample=theano.function([],updates=updates1)
 
-lr=T.fscalar(); nsmps=T.lscalar()
+lr=T.fscalar()
 
-nrg, updates2 = model.update_params(x1, x2, nsmps, lr)
-learn_step=theano.function([idx,nsmps,lr],[nrg],
+nrg, updates2 = model.update_params(x1, x2, lr)
+learn_step=theano.function([idx,lr],[nrg],
 							updates=updates2,
 							givens={x1: xdata[idx-1,:], x2: xdata[idx,:]},
 							allow_input_downcast=True)
@@ -77,12 +67,7 @@ sps, xps, updates3 = model.simulate_forward(nps)
 predict=theano.function([nps],[sps,xps],updates=updates3,allow_input_downcast=True)
 
 
-plr=T.fscalar()
-pnsteps=T.lscalar()
-ploss, updates4 = model.update_proposal_distrib(pnsteps,plr)
-update_prop=theano.function([pnsteps, plr],ploss,updates=updates4,
-							allow_input_downcast=True,
-							on_unused_input='ignore')
+
 
 new_lrs=T.fvector()
 updates5 = model.set_rel_lrates(new_lrs)
@@ -125,13 +110,9 @@ for epoch in range(4):
 		resample_counter+=1
 		
 		if resample_counter>0 and learn_counter>10:
-			energy=learn_step(i,nsamps, lrate)
+			energy=learn_step(i, lrate)
 			e_hist.append(energy)
 			learn_counter=0
-			pl=update_prop(800,1e-7)
-			#pp.plot(pl)
-			#pp.show()
-			ploss_hist.append(pl)
 			l_hist.append(1)
 			lrate=lrate*0.9999
 		else:
