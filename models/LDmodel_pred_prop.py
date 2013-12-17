@@ -39,13 +39,16 @@ class LDmodel():
 		if init_W==None:
 			init_W=np.asarray(np.random.randn(nx,ns)/0.1,dtype='float32')
 		
+		#normalize the columns of W to be unit length
+		#(maybe unnecessary if sampling?)
+		init_W=init_W/np.sqrt(np.sum(init_W**2,axis=0))
 		
 		#dynamical matrix
 		init_M=np.asarray(np.eye(ns),dtype='float32')
 		
 		#sparsity parameters
 		#parametrized as the exponent of ln_b to ensure positivity
-		init_ln_b=np.asarray(1.0*np.ones(ns),dtype='float32')
+		init_ln_b=np.asarray(0.0*np.ones(ns),dtype='float32')
 		
 		self.W=theano.shared(init_W)
 		self.M=theano.shared(init_M)
@@ -88,7 +91,7 @@ class LDmodel():
 		self.idx_helper=theano.shared(np.asarray(np.arange(npcl),dtype='int64'))
 		
 		self.params=							[self.W, self.M, self.ln_b]
-		self.rel_lrates=theano.shared(np.asarray([  0.0,    1.0,     1.0]   ,dtype='float32'))
+		self.rel_lrates=theano.shared(np.asarray([  10.0,    10.0,     10.0]   ,dtype='float32'))
 	
 	
 	def sample_proposal_s(self):
@@ -202,8 +205,7 @@ class LDmodel():
 		#xterm1=-T.mean(T.sum((x1_recons-T.reshape(x1,(self.nx,1)))**2,axis=0)/(2.0*self.xvar**2))
 		xterm2=-T.mean(T.sum((x2_recons-T.reshape(x2,(self.nx,1)))**2,axis=0)/(2.0*self.xvar**2))
 		
-		#energy = hterm1 + xterm1 + hterm2 + xterm2 + sterm -T.sum(T.sum(self.A**2))
-		#energy = hterm1 + xterm2 + sterm 
+		
 		energy = xterm2 + sterm 
 		
 		learning_params=[self.params[i] for i in range(len(self.params)) if self.rel_lrates[i]!=0.0]
@@ -218,10 +220,14 @@ class LDmodel():
 			if param==self.M:
 				#I do this so the derivative of M doesn't depend on the sparsity parameters
 				updates[param] = T.cast(param + gparam*T.reshape(self.b,(1,self.ns))*lrate*rel_lr,'float32')
+				#updates[param] = T.cast(param + gparam*lrate*rel_lr,'float32')
 			elif param==self.b:
 				updates[param] = T.cast(param + gparam*T.reshape(1.0/self.b,(1,self.ns))*lrate*rel_lr,'float32')
 			else:
 				updates[param] = T.cast(param + gparam*lrate*rel_lr,'float32')
+		
+		#newW=updates[self.W]
+		#updates[self.W]=newW/T.sqrt(T.sum(newW**2,axis=0))
 		
 		return energy, updates
 		
@@ -237,7 +243,7 @@ class LDmodel():
 		#samp=self.theano_rng.multinomial(pvals=self.weights_now)
 		#idxs=self.sample_multinomial_vec(self.weights_now,3)
 		samp=self.theano_rng.multinomial(pvals=T.extra_ops.repeat(T.reshape(self.weights_now,(1,self.npcl)),self.npcl,axis=0))
-		idxs=T.cast(T.sum(samp*self.res_mat.T,axis=1),'int32')
+		idxs=T.cast(T.sum(samp*self.res_mat,axis=1),'int32')
 		s_samps=self.s_now[idxs]
 		updates[self.s_now]=s_samps
 		updates[self.weights_now]=T.cast(T.ones_like(self.weights_now)/T.cast(self.npcl,'float32'),'float32') #dtype paranoia

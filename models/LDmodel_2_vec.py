@@ -306,7 +306,7 @@ class LDmodel():
 		#samp=self.theano_rng.multinomial(pvals=self.weights_now)
 		#idxs=self.sample_multinomial_vec(self.weights_now,3)
 		samp=self.theano_rng.multinomial(pvals=T.extra_ops.repeat(T.reshape(self.weights_now,(1,self.npcl)),self.npcl,axis=0))
-		idxs=T.cast(T.sum(samp*self.res_mat.T,axis=1),'int32')
+		idxs=T.cast(T.sum(samp*self.res_mat,axis=1),'int32')
 		s_samps=self.s_now[idxs]
 		updates[self.s_now]=s_samps
 		updates[self.weights_now]=T.cast(T.ones_like(self.weights_now)/T.cast(self.npcl,'float32'),'float32') #dtype paranoia

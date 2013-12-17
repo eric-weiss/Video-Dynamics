@@ -22,7 +22,7 @@ ns=2
 npcl=100
 
 nsamps=20
-lrate=2e-7
+lrate=2e-6
 
 dt=0.05
 nt=200000
@@ -33,7 +33,7 @@ npred=1000
 
 x_hist=[]
 
-theta=0.001
+theta=0.1
 vec=np.ones(2)
 M=np.asarray([[np.cos(theta),-np.sin(theta)],[np.sin(theta),np.cos(theta)]],dtype='float32')
 W=np.asarray(np.random.randn(nx,2),dtype='float32')
@@ -46,14 +46,14 @@ for i in range(nt):
 	
 	vec=v_hist[i]
 	x_hist.append(np.dot(W,vec)+np.random.randn(nx)/100.0)
-	v_hist.append(np.dot(M,vec) + np.random.laplace(scale=1.0/20.0,size=vec.shape))
+	v_hist.append(np.dot(M,vec) + np.random.laplace(scale=np.exp(-3.0),size=vec.shape))
 
 vec=v_hist[-1]
 xact=[]
 for i in range(npred):
 	
 	xact.append(np.dot(W,vec)+np.random.randn(nx)/100.0)
-	vec=np.dot(M,vec) + np.random.laplace(scale=1.0/20.0,size=vec.shape)
+	vec=np.dot(M,vec) + np.random.laplace(scale=np.exp(-3.0),size=vec.shape)
 
 xact=np.asarray(xact)
 
@@ -66,7 +66,7 @@ xdata=theano.shared(x_hist)
 
 xvar=0.1
 
-model=LDmodel(nx, ns, npcl, nsamps, xvar=xvar, init_W=W)
+model=LDmodel(nx, ns, npcl, nsamps, xvar=xvar, init_W=None)
 
 idx=T.lscalar()
 x1=T.fvector()
@@ -121,7 +121,7 @@ s_hist=[]
 r_hist=[]
 l_hist=[]
 w_hist=[]
-ploss_hist=[0.0]
+bhist=[]
 
 th=[]
 
@@ -147,15 +147,16 @@ for i in range(nt-1):
 	
 	ESS=get_ESS()
 	ess_hist.append(ESS)
+	bhist.append(model.ln_b.get_value())
 	learn_counter+=1
 	resample_counter+=1
 	
-	if resample_counter>0 and learn_counter>100:
+	if resample_counter>0 and learn_counter>5:
 		energy=learn_step(i, lrate)
 		e_hist.append(energy)
 		learn_counter=0
 		l_hist.append(1)
-		lrate=lrate*0.9997
+		lrate=lrate*0.9999
 	else:
 		l_hist.append(0)
 	
@@ -164,20 +165,22 @@ for i in range(nt-1):
 		
 		print 'Iteration ', i, ' ================================'
 		print 'ESS: ', ESS
+		print 'Learning rate: ', lrate
 		print '\nParameters'
 		print 'M'
 		print model.M.get_value()
-		#print 'W'
-		#print model.W.get_value()
+		print 'W'
+		print model.W.get_value()
 		print 'b'
-		print np.exp(model.ln_b.get_value())
+		print model.ln_b.get_value()
 		W=model.W.get_value()
-		b=np.exp(model.ln_b.get_value())
+		b=model.ln_b.get_value()
+		
 		
 		#profmode.print_summary()
 	
-	if i==30000:
-		set_rel_lrs(np.asarray([0.0,1.0,1.0]))
+	if i==100000:
+		set_rel_lrs(np.asarray([10.0,100.0,1000.0]))
 		print "CHANGED REL LRATES ====================================="
 	
 	if ESS<npcl/2:
@@ -210,6 +213,7 @@ spred, xpred = predict(npred)
 s_hist=np.asarray(s_hist)
 w_hist=np.asarray(w_hist)
 ess_hist=np.asarray(ess_hist)
+bhist=np.asarray(bhist)
 s_av=np.mean(s_hist,axis=1)
 
 u=s_av[1:,:]-np.dot(s_av[:-1,:],model.M.get_value())
@@ -233,7 +237,10 @@ pp.figure(5)
 pp.plot(ess_hist)
 
 pp.figure(6)
-pp.plot(u)
+pp.plot(bhist)
+
+#pp.figure(6)
+#pp.plot(u)
 
 #pp.figure(7)
 #pp.hist(u.flatten(),1000)
