@@ -14,12 +14,12 @@ print W.shape
 f.close()
 
 wpic=tile_raster_images(W.T,(4,4),(5,4),tile_spacing=(2,2))
-
+image=PIL.Image.fromarray(wpic)
 print np.exp(b)
 
 pp.matshow(M)
 pp.show()
 
-image=PIL.Image.fromarray(wpic)
+
 
 image.save('wpic.png')

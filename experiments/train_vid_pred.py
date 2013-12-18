@@ -3,16 +3,19 @@ from matplotlib import pyplot as pp
 import theano
 import theano.tensor as T
 
+from utils import tile_raster_images
+import matplotlib.cm as cm
+
 import cPickle as cp
 
 import sys
 sys.path.insert(0, '../models')
 
-from LDmodel_2_vec import LDmodel
+from LDmodel_pred_prop import LDmodel
 
 import math
 
-f=open('../vid3.cpl','rb')
+f=open('../data/bars.cpl','rb')
 vid=cp.load(f)
 f.close()
 
@@ -23,11 +26,11 @@ vid=1.0*vid/np.mean(np.abs(vid))
 
 nt,nx=vid.shape
 print vid.shape
-ns=20
+ns=64
 npcl=200
 
 nsamps=20
-lrate=2e-5
+lrate=2e-6
 
 npred=1000
 
@@ -35,7 +38,7 @@ xdata=theano.shared(vid)
 
 xvar=0.1
 
-model=LDmodel(nx, ns, npcl,nsamps xvar=xvar)
+model=LDmodel(nx, ns, npcl,nsamps, xvar=xvar)
 
 idx=T.lscalar()
 x1=T.fvector()
@@ -84,6 +87,18 @@ ploss_hist=[0.0]
 
 th=[]
 
+W=model.W.get_value()
+M=model.M.get_value()
+b=np.exp(model.ln_b.get_value())
+
+pp.ion()
+fig=pp.figure()
+axW=fig.add_subplot(2,1,1)
+wpic=tile_raster_images(W.T,(8,8),(8,8),tile_spacing=(1,1))
+imgW=axW.matshow(wpic,cmap=cm.gray)
+axM=fig.add_subplot(2,1,2)
+imgM=axM.matshow(M)
+
 resample_counter=0
 learn_counter=0
 for epoch in range(4):
@@ -109,7 +124,10 @@ for epoch in range(4):
 		learn_counter+=1
 		resample_counter+=1
 		
-		if resample_counter>0 and learn_counter>10:
+		if resample_counter>0 and learn_counter>5:
+			W=model.W.get_value()
+			M=model.M.get_value()
+			b=np.exp(model.ln_b.get_value())
 			energy=learn_step(i, lrate)
 			e_hist.append(energy)
 			learn_counter=0
@@ -123,24 +141,18 @@ for epoch in range(4):
 			
 			print 'Iteration ', i+nt*epoch, ' ================================'
 			print 'ESS: ', ESS
-			#print '\nParameters'
-			#print 'M'
-			#print model.M.get_value()
-			#print 'W'
-			#print model.W.get_value()
-			#print 'b'
+			print 'Avg. delta W: ', np.mean(np.abs(model.W.get_value()-W))
+			print 'Avg. delta M: ', np.mean(np.abs(model.M.get_value()-M))
+			print 'b'
 			print np.exp(model.ln_b.get_value())
-			print '\nMetaparameters:'
-			print 'Proposal loss: ', ploss_hist[-1]
-			print 'CCT-dot-true inverse covariance'
-			#W=model.W.get_value()
-			#b=np.exp(model.ln_b.get_value())
-			#C=model.C.get_value()
-			#cov_inv=np.dot(np.dot(C,C.T), np.dot(W.T, W)/(xvar**2))
-			#print cov_inv
-			#print model.weights_now.get_value()
+			wpic=tile_raster_images(W.T,(8,8),(8,8),tile_spacing=(1,1))
+			imgW.set_data(wpic)
+			imgW.autoscale()
+			imgM.set_data(M)
+			imgM.autoscale()
+			fig.canvas.draw()
 			
-		if ESS<npcl/2:
+		if ESS<float(npcl)/3.0:
 			resample()
 			resample_counter=0
 			r_hist.append(1)
@@ -152,16 +164,12 @@ for epoch in range(4):
 		
 		if math.isnan(ESS):
 			print '\nSAMPLING ERROR===================\n'
-			print 'Proposal loss: ', ploss_hist[-1]
-			print 'CCT-dot-true inverse covariance'
-			cov_inv=np.dot(np.dot(C,C.T), np.dot(W.T, W)/(xvar**2))
-			print cov_inv
 			break
 
 W=model.W.get_value()
 M=model.M.get_value()
 b=np.exp(model.ln_b.get_value())
-C=model.C.get_value()
+
 
 f=open('W.cpl','wb')
 cp.dump(W,f,2)
@@ -223,10 +231,6 @@ pp.plot(ess_hist)
 #pp.figure(7)
 #pp.plot(spred)
 
-
-ploss_hist=np.asarray(ploss_hist)
-pp.figure(9)
-pp.plot(ploss_hist)
 
 #pp.figure(6)
 #for i in range(npcl):

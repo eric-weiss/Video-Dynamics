@@ -5,14 +5,14 @@ from matplotlib import pyplot as pp
 
 from makegif import writeGif
 
-nbars=6
-nx=64
-wmin=1
-wmax=5
-smin=2
-smax=8
+nbars=3
+nx=8
+wmin=0.5
+wmax=1
+smin=1
+smax=3
 
-nt=50
+nt=100000
 
 pics=[]
 
@@ -30,6 +30,7 @@ print pos
 print vecs
 print widths
 print speeds
+out=[]
 
 for i in range(nt):
 	
@@ -50,9 +51,27 @@ for i in range(nt):
 		
 		pic=pic+barpic
 	
+	
 	pic=np.clip(pic, 0,1)
 	
 	pics.append(pic)
 	pos=pos+0.5*speeds
+	out.append(pic.flatten())
+	
+	for j in range(nbars):
+		if pos[j]>nx:
+			pos[j]=-nx
+			vec=np.random.randn(1,2)
+			vec=vec/np.reshape(np.sqrt(np.sum(vec**2,axis=1)),(1,1))
+			width=np.random.rand()*(wmax-wmin)+wmin
+			speed=np.random.rand()*(smax-smin)+smin
+			vecs[j]=vec
+			widths[j]=width
+			speeds[j]=speed
 
-writeGif('test.gif',pics)
+out=np.asarray(out,dtype='float32')
+f=open('data/bars.cpl','wb')
+cp.dump(out,f,2)
+f.close()
+
+writeGif('test.gif',pics[:200])
