@@ -48,7 +48,7 @@ class LDmodel():
 		
 		#sparsity parameters
 		#parametrized as the exponent of ln_b to ensure positivity
-		init_ln_b=np.asarray(0.0*np.ones(ns),dtype='float32')
+		init_ln_b=np.asarray(-1.0*np.ones(ns),dtype='float32')
 		
 		self.W=theano.shared(init_W)
 		self.M=theano.shared(init_M)

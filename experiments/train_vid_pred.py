@@ -26,8 +26,8 @@ vid=1.0*vid/np.mean(np.abs(vid))
 
 nt,nx=vid.shape
 print vid.shape
-ns=64
-npcl=200
+ns=16
+npcl=400
 
 nsamps=20
 lrate=2e-6
@@ -94,7 +94,7 @@ b=np.exp(model.ln_b.get_value())
 pp.ion()
 fig=pp.figure()
 axW=fig.add_subplot(2,1,1)
-wpic=tile_raster_images(W.T,(8,8),(8,8),tile_spacing=(1,1))
+wpic=tile_raster_images(W.T,(8,8),(4,4),tile_spacing=(1,1))
 imgW=axW.matshow(wpic,cmap=cm.gray)
 axM=fig.add_subplot(2,1,2)
 imgM=axM.matshow(M)
@@ -145,7 +145,7 @@ for epoch in range(4):
 			print 'Avg. delta M: ', np.mean(np.abs(model.M.get_value()-M))
 			print 'b'
 			print np.exp(model.ln_b.get_value())
-			wpic=tile_raster_images(W.T,(8,8),(8,8),tile_spacing=(1,1))
+			wpic=tile_raster_images(W.T,(8,8),(4,4),tile_spacing=(1,1))
 			imgW.set_data(wpic)
 			imgW.autoscale()
 			imgM.set_data(M)
@@ -159,8 +159,8 @@ for epoch in range(4):
 		else:
 			r_hist.append(0)
 		
-		s_hist.append(model.s_now.get_value())
-		w_hist.append(model.weights_now.get_value())
+		#s_hist.append(model.s_now.get_value())
+		#w_hist.append(model.weights_now.get_value())
 		
 		if math.isnan(ESS):
 			print '\nSAMPLING ERROR===================\n'
@@ -184,12 +184,12 @@ f.close()
 #print hsmps.shape
 #print hsmps
 
-s_hist=np.asarray(s_hist)
-w_hist=np.asarray(w_hist)
+#s_hist=np.asarray(s_hist)
+#w_hist=np.asarray(w_hist)
 ess_hist=np.asarray(ess_hist)
-s_av=np.mean(s_hist,axis=1)
+#s_av=np.mean(s_hist,axis=1)
 
-u=s_av[1:,:]-np.dot(s_av[:-1,:],model.M.get_value())
+#u=s_av[1:,:]-np.dot(s_av[:-1,:],model.M.get_value())
 
 pp.figure(1)
 pp.matshow(M)
