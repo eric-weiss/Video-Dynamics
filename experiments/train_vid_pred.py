@@ -15,7 +15,7 @@ from LDmodel_pred_prop import LDmodel
 
 import math
 
-f=open('../data/bars.cpl','rb')
+f=open('../data/vid1.cpl','rb')
 vid=cp.load(f)
 f.close()
 
@@ -26,7 +26,7 @@ vid=1.0*vid/np.mean(np.abs(vid))
 
 nt,nx=vid.shape
 print vid.shape
-ns=16
+ns=64
 npcl=400
 
 nsamps=20
@@ -94,14 +94,14 @@ b=np.exp(model.ln_b.get_value())
 pp.ion()
 fig=pp.figure()
 axW=fig.add_subplot(2,1,1)
-wpic=tile_raster_images(W.T,(8,8),(4,4),tile_spacing=(1,1))
+wpic=tile_raster_images(W.T,(8,8),(8,8),tile_spacing=(1,1))
 imgW=axW.matshow(wpic,cmap=cm.gray)
 axM=fig.add_subplot(2,1,2)
 imgM=axM.matshow(M)
 
 resample_counter=0
 learn_counter=0
-for epoch in range(4):
+for epoch in range(1):
 	for i in range(nt-1):
 		
 		#normalizer,energies,ssamps,spreds,WTx=inference_step(vec)
@@ -125,9 +125,7 @@ for epoch in range(4):
 		resample_counter+=1
 		
 		if resample_counter>0 and learn_counter>5:
-			W=model.W.get_value()
-			M=model.M.get_value()
-			b=np.exp(model.ln_b.get_value())
+			
 			energy=learn_step(i, lrate)
 			e_hist.append(energy)
 			learn_counter=0
@@ -141,11 +139,14 @@ for epoch in range(4):
 			
 			print 'Iteration ', i+nt*epoch, ' ================================'
 			print 'ESS: ', ESS
-			print 'Avg. delta W: ', np.mean(np.abs(model.W.get_value()-W))
-			print 'Avg. delta M: ', np.mean(np.abs(model.M.get_value()-M))
+			#print 'Avg. delta W: ', np.mean(np.abs(model.W.get_value()-W))
+			#print 'Avg. delta M: ', np.mean(np.abs(model.M.get_value()-M))
 			print 'b'
 			print np.exp(model.ln_b.get_value())
-			wpic=tile_raster_images(W.T,(8,8),(4,4),tile_spacing=(1,1))
+			W=model.W.get_value()
+			M=model.M.get_value()
+			b=np.exp(model.ln_b.get_value())
+			wpic=tile_raster_images(W.T,(8,8),(8,8),tile_spacing=(1,1))
 			imgW.set_data(wpic)
 			imgW.autoscale()
 			imgM.set_data(M)
@@ -191,7 +192,7 @@ ess_hist=np.asarray(ess_hist)
 
 #u=s_av[1:,:]-np.dot(s_av[:-1,:],model.M.get_value())
 
-pp.figure(1)
+pp.figure(2)
 pp.matshow(M)
 
 e_hist=np.asarray(e_hist)

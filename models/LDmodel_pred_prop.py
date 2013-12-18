@@ -117,7 +117,7 @@ class LDmodel():
 		
 		x_terms=-T.sum((recons-T.reshape(xp,(self.nx,1)))**2,axis=0)/(2.0*self.xvar**2)
 		
-		energies=x_terms
+		energies=x_terms-T.sum(T.abs_(s_samps),axis=1)
 		
 		#to avoid exponentiating large or very small numbers, I 
 		#"re-center" the reweighting factors by adding a constant, 
@@ -206,8 +206,8 @@ class LDmodel():
 			else:
 				updates[param] = T.cast(param + gparam*lrate*rel_lr,'float32')
 		
-		#newW=updates[self.W]
-		#updates[self.W]=newW/T.sqrt(T.sum(newW**2,axis=0))
+		newW=updates[self.W]
+		updates[self.W]=newW/T.sqrt(T.sum(newW**2,axis=0))
 		
 		return energy, updates
 		
