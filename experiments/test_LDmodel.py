@@ -19,13 +19,13 @@ import math
 
 nx=8
 ns=2
-npcl=50
+npcl=100
 
-nsamps=10
-lrate=2e-5
+nsamps=20
+lrate=2e-6
 
 dt=0.05
-nt=200000
+nt=100000
 
 npred=1000
 
@@ -156,7 +156,7 @@ for i in range(nt-1):
 	learn_counter+=1
 	resample_counter+=1
 	
-	if resample_counter>0 and learn_counter>100:
+	if resample_counter>0 and learn_counter>5:
 		energy=learn_step(i, lrate)
 		e_hist.append(energy)
 		learn_counter=0
@@ -190,8 +190,8 @@ for i in range(nt-1):
 		
 		#profmode.print_summary()
 	
-	if i==30000:
-		set_rel_lrs(np.asarray([0.0,1.0,1.0]))
+	if i==50000:
+		set_rel_lrs(np.asarray([10.0,100.0,2000.0]))
 		print "CHANGED REL LRATES ====================================="
 	
 	if ESS<npcl/2:

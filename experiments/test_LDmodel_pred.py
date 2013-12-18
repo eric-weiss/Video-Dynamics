@@ -25,7 +25,7 @@ nsamps=20
 lrate=2e-6
 
 dt=0.05
-nt=200000
+nt=100000
 
 npred=1000
 
@@ -156,7 +156,7 @@ for i in range(nt-1):
 		e_hist.append(energy)
 		learn_counter=0
 		l_hist.append(1)
-		lrate=lrate*0.9999
+		lrate=lrate*0.9997
 	else:
 		l_hist.append(0)
 	
@@ -179,11 +179,11 @@ for i in range(nt-1):
 		
 		#profmode.print_summary()
 	
-	if i==100000:
-		set_rel_lrs(np.asarray([10.0,100.0,1000.0]))
+	if i==50000:
+		set_rel_lrs(np.asarray([10.0,100.0,2000.0]))
 		print "CHANGED REL LRATES ====================================="
 	
-	if ESS<npcl/2:
+	if ESS<float(npcl)/4.0:
 		resample()
 		resample_counter=0
 		r_hist.append(1)
